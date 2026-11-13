@@ -1,0 +1,512 @@
+// 플레이어(상어) 변수
+float playerX, playerY;
+float playerSize = 25;
+float targetSize = 25;
+float playerAngle = 0;
+
+// 가상 조이스틱 변수 (우측 하단 배치)
+float joyBaseX, joyBaseY;
+float joyKnobX, joyKnobY;
+float joyOuterRadius = 68;
+float joyInnerRadius = 28;
+boolean isJoyDragging = false;
+float moveDirX = 0;
+float moveDirY = 0;
+
+// 적 물고기 리스트 및 배경 물방울
+ArrayList<Fish> fishes = new ArrayList<Fish>();
+ArrayList<Bubble> bubbles = new ArrayList<Bubble>();
+
+// 게임 상태 및 점수
+int score = 0;
+int highScore = 0;
+boolean isGameOver = false;
+boolean isClear = false;
+float winSize = 180;
+
+void setup() {
+  size(1000, 650);
+  textAlign(CENTER, CENTER);
+  
+  joyBaseX = width - 115;
+  joyBaseY = height - 115;
+  joyKnobX = joyBaseX;
+  joyKnobY = joyBaseY;
+  
+  initGame();
+}
+
+void initGame() {
+  playerX = width / 2.0;
+  playerY = height / 2.0;
+  playerSize = 25;
+  targetSize = 25;
+  score = 0;
+  isGameOver = false;
+  isClear = false;
+  
+  isJoyDragging = false;
+  moveDirX = 0;
+  moveDirY = 0;
+  joyKnobX = joyBaseX;
+  joyKnobY = joyBaseY;
+  
+  fishes.clear();
+  bubbles.clear();
+  
+  for (int i = 0; i < 25; i++) {
+    bubbles.add(new Bubble(random(width), random(height)));
+  }
+  
+  for (int i = 0; i < 16; i++) {
+    spawnFish(true);
+  }
+}
+
+void draw() {
+  drawOceanBackground();
+  
+  for (Bubble b : bubbles) {
+    b.update();
+    b.display();
+  }
+  
+  if (!isGameOver && !isClear) {
+    updatePlayer();
+    
+    if (fishes.size() < 22 && random(1) < 0.04) {
+      spawnFish(false);
+    }
+  }
+  
+  // 적 물고기 업데이트, 그리기 및 충돌 판정
+  for (int i = fishes.size() - 1; i >= 0; i--) {
+    Fish f = fishes.get(i);
+    f.update();
+    f.display();
+    
+    if (f.isOffScreen()) {
+      fishes.remove(i);
+      continue;
+    }
+    
+    if (!isGameOver && !isClear) {
+      float d = dist(playerX, playerY, f.x, f.y);
+      if (d < (playerSize * 0.45 + f.size * 0.45)) {
+        int myVal = round(playerSize);
+        int enemyVal = f.sizeValue;
+        
+        if (myVal >= enemyVal) {
+          score += f.isMathProblem ? enemyVal * 2 : enemyVal;
+          if (score > highScore) highScore = score;
+          
+          targetSize += f.size * 0.13;
+          fishes.remove(i);
+          
+          if (targetSize >= winSize) {
+            isClear = true;
+          }
+        } else {
+          isGameOver = true;
+        }
+      }
+    }
+  }
+  
+  if (!isGameOver) {
+    drawPlayer();
+  }
+  
+  drawUI();
+  if (!isGameOver && !isClear) {
+    drawJoystick();
+  }
+  
+  if (isGameOver) {
+    drawEndScreen("EATEN BY A BIGGER FISH!", color(255, 90, 90));
+  } else if (isClear) {
+    drawEndScreen("MATH & OCEAN MASTER!", color(100, 255, 160));
+  }
+}
+
+void drawOceanBackground() {
+  for (int y = 0; y < height; y += 4) {
+    float inter = map(y, 0, height, 0, 1);
+    color c = lerpColor(color(20, 110, 175), color(5, 35, 75), inter);
+    fill(c);
+    noStroke();
+    rect(0, y, width, 4);
+  }
+}
+
+void updatePlayer() {
+  if (abs(moveDirX) > 0.05 || abs(moveDirY) > 0.05) {
+    playerAngle = atan2(moveDirY, moveDirX);
+    
+    float maxSpeed = map(playerSize, 25, winSize, 6.2, 4.2);
+    playerX += moveDirX * maxSpeed;
+    playerY += moveDirY * maxSpeed;
+  }
+  
+  playerX = constrain(playerX, playerSize * 0.5, width - playerSize * 0.5);
+  playerY = constrain(playerY, playerSize * 0.5 + 30, height - playerSize * 0.5);
+  
+  playerSize = lerp(playerSize, targetSize, 0.1);
+}
+
+void drawJoystick() {
+  pushMatrix();
+  
+  fill(255, isJoyDragging ? 45 : 28);
+  stroke(255, isJoyDragging ? 140 : 85);
+  strokeWeight(2.5);
+  ellipse(joyBaseX, joyBaseY, joyOuterRadius * 2, joyOuterRadius * 2);
+  
+  stroke(255, 50);
+  strokeWeight(1.5);
+  line(joyBaseX - 12, joyBaseY, joyBaseX + 12, joyBaseY);
+  line(joyBaseX, joyBaseY - 12, joyBaseX, joyBaseY + 12);
+  
+  fill(255, isJoyDragging ? 165 : 105);
+  stroke(255, isJoyDragging ? 220 : 150);
+  strokeWeight(2);
+  ellipse(joyKnobX, joyKnobY, joyInnerRadius * 2, joyInnerRadius * 2);
+  
+  popMatrix();
+}
+
+void updateJoystickKnob(float touchX, float touchY) {
+  float dx = touchX - joyBaseX;
+  float dy = touchY - joyBaseY;
+  float distance = dist(touchX, touchY, joyBaseX, joyBaseY);
+  
+  if (distance > joyOuterRadius) {
+    float angle = atan2(dy, dx);
+    joyKnobX = joyBaseX + cos(angle) * joyOuterRadius;
+    joyKnobY = joyBaseY + sin(angle) * joyOuterRadius;
+    moveDirX = cos(angle);
+    moveDirY = sin(angle);
+  } else {
+    joyKnobX = touchX;
+    joyKnobY = touchY;
+    moveDirX = dx / joyOuterRadius;
+    moveDirY = dy / joyOuterRadius;
+  }
+}
+
+void drawPlayer() {
+  pushMatrix();
+  translate(playerX, playerY);
+  
+  // 상어 그래픽 먼저 그리기
+  pushMatrix();
+  if (abs(playerAngle) > HALF_PI) {
+    scale(1, -1);
+    rotate(-playerAngle);
+  } else {
+    rotate(playerAngle);
+  }
+  
+  float tailWag = sin(frameCount * 0.25) * (playerSize * 0.12);
+  fill(45, 130, 180);
+  noStroke();
+  triangle(-playerSize * 0.45, 0, 
+           -playerSize * 0.85, -playerSize * 0.32 + tailWag, 
+           -playerSize * 0.85, playerSize * 0.32 + tailWag);
+           
+  fill(40, 115, 165);
+  triangle(-playerSize * 0.1, -playerSize * 0.25,
+           playerSize * 0.1, -playerSize * 0.25,
+           -playerSize * 0.15, -playerSize * 0.55);
+  
+  fill(60, 160, 215);
+  ellipse(0, 0, playerSize * 1.15, playerSize * 0.68);
+  
+  fill(210, 235, 250);
+  arc(0, playerSize * 0.04, playerSize * 1.05, playerSize * 0.55, 0, PI);
+  
+  fill(255);
+  ellipse(playerSize * 0.3, -playerSize * 0.1, playerSize * 0.16, playerSize * 0.16);
+  fill(15);
+  ellipse(playerSize * 0.33, -playerSize * 0.1, playerSize * 0.08, playerSize * 0.08);
+  popMatrix();
+  
+  // 상어 등 위에 크고 선명한 하얀색 글씨 + 검은 테두리로 사이즈 표기
+  float fontSize = constrain(playerSize * 0.48, 20, 38);
+  drawOutlinedText(str(round(playerSize)), 0, -playerSize * 0.45 - fontSize * 0.45, fontSize);
+  
+  popMatrix();
+}
+
+void spawnFish(boolean initial) {
+  int fVal;
+  if (initial || random(1) < 0.68) {
+    fVal = int(random(max(8, playerSize * 0.35), playerSize * 0.95));
+  } else {
+    fVal = int(random(playerSize * 1.05, min(220, playerSize * 1.85)));
+  }
+  
+  float mathProb = constrain(map(playerSize, 32, 130, 0.0, 0.85), 0.0, 0.85);
+  boolean isMath = !initial && (random(1) < mathProb);
+  
+  boolean fromLeft = random(1) < 0.5;
+  float startX = fromLeft ? -fVal - 20 : width + fVal + 20;
+  float startY = random(85, height - 45);
+  float speed = map(fVal, 8, 220, 3.2, 1.2) * (fromLeft ? 1 : -1);
+  
+  fishes.add(new Fish(startX, startY, fVal, speed, isMath));
+}
+
+// 말풍선 없이 하얀색 글씨 + 두꺼운 검은색 외곽선으로 표기하는 함수
+void drawOutlinedText(String txt, float x, float y, float fontSize) {
+  textSize(fontSize);
+  textAlign(CENTER, CENTER);
+  
+  // 8방향으로 검은색 외곽선 그리기 (두껍고 선명한 테두리 효과)
+  fill(0, 235);
+  float outline = max(2.2, fontSize * 0.09);
+  for (int dx = -1; dx <= 1; dx++) {
+    for (int dy = -1; dy <= 1; dy++) {
+      if (dx != 0 || dy != 0) {
+        text(txt, x + dx * outline, y + dy * outline);
+      }
+    }
+  }
+  
+  // 중앙에 하얀색 본문 글씨 그리기
+  fill(255);
+  text(txt, x, y);
+}
+
+void drawUI() {
+  fill(0, 90);
+  noStroke();
+  rect(0, 0, width, 48);
+  
+  fill(255);
+  textSize(17);
+  textAlign(LEFT, CENTER);
+  text("SCORE: " + score + "   |   MY SIZE: " + round(playerSize), 25, 24);
+  
+  int mathPercent = int(constrain(map(playerSize, 32, 130, 0, 85), 0, 85));
+  textAlign(CENTER, CENTER);
+  fill(255, 220, 100);
+  text("MATH RATE: " + mathPercent + "%   (Goal: " + int(winSize) + ")", width / 2.0 + 40, 24);
+  
+  fill(255, 50);
+  rect(width - 105, 9, 85, 30, 8);
+  textAlign(CENTER, CENTER);
+  fill(255);
+  textSize(14);
+  text("RESET", width - 62.5, 24);
+}
+
+void drawEndScreen(String title, color titleColor) {
+  fill(0, 175);
+  rect(0, 0, width, height);
+  
+  textAlign(CENTER, CENTER);
+  fill(titleColor);
+  textSize(40);
+  text(title, width / 2.0, height / 2.0 - 45);
+  
+  fill(255);
+  textSize(24);
+  text("FINAL SCORE: " + score + "  (Reached Size: " + round(playerSize) + ")", width / 2.0, height / 2.0 + 10);
+  
+  textSize(18);
+  fill(200, 230, 255);
+  text("Tap anywhere to play again", width / 2.0, height / 2.0 + 60);
+}
+
+void mousePressed() {
+  if (isGameOver || isClear) {
+    initGame();
+    return;
+  }
+  
+  if (mouseX >= width - 105 && mouseX <= width - 20 && mouseY >= 9 && mouseY <= 39) {
+    initGame();
+    return;
+  }
+  
+  if (dist(mouseX, mouseY, joyBaseX, joyBaseY) <= joyOuterRadius * 1.4) {
+    isJoyDragging = true;
+    updateJoystickKnob(mouseX, mouseY);
+  }
+}
+
+void mouseDragged() {
+  if (isJoyDragging && !isGameOver && !isClear) {
+    updateJoystickKnob(mouseX, mouseY);
+  }
+}
+
+void mouseReleased() {
+  isJoyDragging = false;
+  moveDirX = 0;
+  moveDirY = 0;
+  joyKnobX = joyBaseX;
+  joyKnobY = joyBaseY;
+}
+
+void keyPressed() {
+  if (key == 'r' || key == 'R') {
+    initGame();
+  }
+}
+
+// ==========================================
+// 적 물고기 클래스
+// ==========================================
+class Fish {
+  float x, y, size, speedX;
+  int sizeValue;
+  String displayLabel;
+  boolean isMathProblem;
+  float waveOffset;
+  color bodyColor;
+  
+  Fish(float x, float y, int sizeValue, float speedX, boolean isMathProblem) {
+    this.x = x;
+    this.y = y;
+    this.sizeValue = sizeValue;
+    this.size = sizeValue;
+    this.speedX = speedX;
+    this.isMathProblem = isMathProblem;
+    this.waveOffset = random(TWO_PI);
+    
+    if (isMathProblem) {
+      this.displayLabel = generateMathExpression(sizeValue, playerSize);
+    } else {
+      this.displayLabel = str(sizeValue);
+    }
+    
+    color[] palette = {
+      color(255, 140, 50),
+      color(255, 205, 60),
+      color(235, 80, 110),
+      color(150, 110, 230),
+      color(70, 200, 170)
+    };
+    this.bodyColor = palette[int(random(palette.length))];
+  }
+  
+  String generateMathExpression(int target, float currentLevel) {
+    int type;
+    if (currentLevel < 60) {
+      type = int(random(2)); 
+    } else if (currentLevel < 110) {
+      type = int(random(3)); 
+    } else {
+      type = int(random(4)); 
+    }
+    
+    if (type == 0) {
+      int a = int(random(2, target - 1));
+      int b = target - a;
+      return a + " + " + b;
+    } else if (type == 1) {
+      int b = int(random(3, 35));
+      int a = target + b;
+      return a + " - " + b;
+    } else if (type == 2) {
+      ArrayList<Integer> factors = new ArrayList<Integer>();
+      for (int i = 2; i <= sqrt(target); i++) {
+        if (target % i == 0) factors.add(i);
+      }
+      if (factors.size() > 0) {
+        int a = factors.get(int(random(factors.size())));
+        int b = target / a;
+        return a + " × " + b;
+      } else {
+        int b = int(random(12, 45));
+        return (target + b) + " - " + b;
+      }
+    } else {
+      int b = int(random(2, 6));
+      int a = target * b;
+      return a + " ÷ " + b;
+    }
+  }
+  
+  void update() {
+    x += speedX;
+    y += sin(frameCount * 0.06 + waveOffset) * 0.6;
+  }
+  
+  void display() {
+    pushMatrix();
+    translate(x, y);
+    
+    // 물고기 몸통 먼저 그리기
+    pushMatrix();
+    if (speedX < 0) {
+      scale(-1, 1);
+    }
+    
+    float tailWag = sin(frameCount * 0.2 + waveOffset) * (size * 0.12);
+    
+    fill(lerpColor(bodyColor, color(0), 0.2));
+    noStroke();
+    triangle(-size * 0.4, 0, 
+             -size * 0.78, -size * 0.3 + tailWag, 
+             -size * 0.78, size * 0.3 + tailWag);
+    
+    fill(bodyColor);
+    ellipse(0, 0, size, size * 0.65);
+    
+    fill(255, 180);
+    rect(-size * 0.05, -size * 0.28, size * 0.1, size * 0.56, 4);
+    
+    fill(255);
+    ellipse(size * 0.26, -size * 0.08, size * 0.18, size * 0.18);
+    fill(20);
+    ellipse(size * 0.29, -size * 0.08, size * 0.09, size * 0.09);
+    popMatrix();
+    
+    // 물고기 등 위에 크고 선명한 하얀색 글씨 + 검은 테두리로 표기
+    float fontSize = constrain(size * 0.44, 18, 36);
+    if (isMathProblem) {
+      fontSize = max(fontSize, 21); // 산수식은 작은 물고기여도 잘 보이도록 최소 크기 보장
+    }
+    drawOutlinedText(displayLabel, 0, -size * 0.35 - fontSize * 0.45, fontSize);
+    
+    popMatrix();
+  }
+  
+  boolean isOffScreen() {
+    return (speedX > 0 && x > width + size * 1.5 + 40) || 
+           (speedX < 0 && x < -size * 1.5 - 40);
+  }
+}
+
+// ==========================================
+// 배경 기포 클래스
+// ==========================================
+class Bubble {
+  float x, y, r, speed;
+  
+  Bubble(float x, float y) {
+    this.x = x;
+    this.y = y;
+    this.r = random(4, 14);
+    this.speed = map(r, 4, 14, 0.6, 1.8);
+  }
+  
+  void update() {
+    y -= speed;
+    x += sin(frameCount * 0.03 + y * 0.05) * 0.3;
+    if (y < -20) {
+      y = height + 20;
+      x = random(width);
+    }
+  }
+  
+  void display() {
+    noFill();
+    stroke(255, 70);
+    strokeWeight(1.2);
+    ellipse(x, y, r, r);
+  }
+}
